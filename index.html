@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>猛鬼宿舍 - Ghost Dorm</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            -webkit-tap-highlight-color: transparent;
+            touch-action: manipulation;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #1a1a2e;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 10px;
+            color: white;
+            overflow-x: hidden;
+        }
+        
+        h1 {
+            color: #e94560;
+            margin-bottom: 10px;
+            text-shadow: 0 0 10px #e94560;
+            font-size: 24px;
+        }
+        
+        .stats-bar {
+            display: flex;
+            gap: 15px;
+            margin-bottom: 10px;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+        
+        .stat-item {
+            background: linear-gradient(135deg, #16213e 0%, #0f3460 100%);
+            padding: 8px 15px;
+            border-radius: 20px;
+            font-weight: bold;
+            border: 1px solid #e94560;
+            font-size: 14px;
+        }
+        
+        .stat-item.gold { color: #ffd700; }
+        .stat-item.hp { color: #ff6b6b; }
+        .stat-item.wave { color: #4ecdc4; }
+        
+        #gameCanvas {
+            background: #0f0f1e;
+            border-radius: 10px;
+            border: 2px solid #e94560;
+            box-shadow: 0 0 20px rgba(233, 69, 96, 0.3);
+            max-width: 100%;
+        }
+        
+        .controls {
+            margin-top: 15px;
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+        
+        button {
+            padding: 12px 20px;
+            font-size: 14px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.3s;
+            font-weight: bold;
+            color: white;
+        }
+        
+        button:active {
+            transform: scale(0.95);
+        }
+        
+        .btn-build {
+            background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
+        }
+        
+        .btn-upgrade {
+            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+        }
+        
+        .btn-repair {
+            background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+        }
+        
+        .btn-start {
+            background: linear-gradient(135deg, #fa709a 0%, #fee140 100%);
+            color: #1a1a2e;
+        }
+        
+        .build-menu {
+            display: none;
+            position: fixed;
+            bottom: 80px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(22, 33, 62, 0.95);
+            padding: 15px;
+            border-radius: 15px;
+            border: 2px solid #e94560;
+            z-index: 100;
+            flex-wrap: wrap;
+            gap: 10px;
+            justify-content: center;
+            max-width: 90%;
+        }
+        
+        .build-menu.active {
+            display: flex;
+        }
+        
+        .build-item {
+            background: #0f3460;
+            padding: 10px;
+            border-radius: 10px;
+            text-align: center;
+            cursor: pointer;
+            border: 2px solid transparent;
+            transition: all 0.3s;
+            min-width: 80px;
+        }
+        
+        .build-item:hover, .build-item:active {
+            border-color: #e94560;
+            transform: scale(1.05);
+        }
+        
+        .build-item .icon {
+            font-size: 24px;
+            margin-bottom: 5px;
+        }
+        
+        .build-item .name {
+            font-size: 12px;
+            margin-bottom: 3px;
+        }
+        
+        .build-item .cost {
+            font-size: 11px;
+            color: #ffd700;
+        }
+        
+        .game-over, .game-win {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.9);
+            display: none;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+        }
+        
+        .game-over-content, .game-win-content {
+            background: linear-gradient(135deg, #16213e 0%, #0f3460 100%);
+            padding: 40px;
+            border-radius: 20px;
+            text-align: center;
+            border: 3px solid #e94560;
+        }
+        
+        .game-over h2 { color: #e94560; }
+        .game-win h2 { color: #38ef7d; }
+        
+        .final-wave {
+            font-size: 36px;
+            color: #ffd700;
+            margin: 20px 0;
+        }
+        
+        .instructions {
+            background: rgba(22, 33, 62, 0.9);
+            border-radius: 15px;
+            padding: 15px;
+            margin-top: 15px;
+            max-width: 100%;
+            width: 400px;
+            border: 1px solid #e94560;
+        }
+        
+        .instructions h3 {
+            color: #e94560;
+            margin-bottom: 10px;
+            text-align: center;
+        }
+        
+        .instructions ol {
+            padding-left: 20px;
+            line-height: 1.6;
+            font-size: 13px;
+        }
+        
+        @media (max-width: 480px) {
+            h1 { font-size: 20px; }
+            .stat-item { padding: 6px 12px; font-size: 12px; }
+            button { padding: 10px 15px; font-size: 12px; }
+        }
+    </style>
+</head>
+<body>
+    <h1>👻 猛鬼宿舍</h1>
+    
+    <div class="stats-bar">
+        <div class="stat-item gold">💰 金币: <span id="gold">100</span></div>
+        <div class="stat-item hp">❤️ 门血量: <span id="doorHp">100</span>/<span id="doorMaxHp">100</span></div>
+        <div class="stat-item wave">🌊 波数: <span id="wave">1</span>/<span id="maxWave">10</span></div>
+    </div>
+    
+    <canvas id="gameCanvas" width="400" height="500"></canvas>
+    
+    <div class="controls">
+        <button class="btn-build" onclick="toggleBuildMenu()">🔨 建造</button>
+        <button class="btn-upgrade" onclick="upgradeDoor()">⬆️ 升级门</button>
+        <button class="btn-repair" onclick="repairDoor()">🔧 修门</button>
+        <button class="btn-start" onclick="startWave()">▶️ 开始波次</button>
+    </div>
+    
+    <div class="build-menu" id="buildMenu">
+        <div class="build-item" onclick="selectBuild('turret')">
+            <div class="icon">🔫</div>
+            <div class="name">炮台</div>
+            <div class="cost">50金币</div>
+        </div>
+        <div class="build-item" onclick="selectBuild('bed')">
+            <div class="icon">🛏️</div>
+            <div class="name">床铺</div>
+            <div class="cost">30金币</div>
+        </div>
+        <div class="build-item" onclick="selectBuild('generator')">
+            <div class="icon">⚡</div>
+            <div class="name">发电机</div>
+            <div class="cost">80金币</div>
+        </div>
+        <div class="build-item" onclick="selectBuild('trap')">
+            <div class="icon">🕸️</div>
+            <div class="name">陷阱</div>
+            <div class="cost">40金币</div>
+        </div>
+    </div>
+    
+    <div class="game-over" id="gameOver">
+        <div class="game-over-content">
+            <h2>💀 游戏结束</h2>
+            <p>门被猛鬼攻破了！</p>
+            <div class="final-wave">存活波数: <span id="finalWave">0</span></div>
+            <button class="btn-start" onclick="resetGame()">再玩一次</button>
+        </div>
+    </div>
+    
+    <div class="game-win" id="gameWin">
+        <div class="game-win-content">
+            <h2>🎉 胜利！</h2>
+            <p>你成功抵御了所有猛鬼！</p>
+            <div class="final-wave">最终波数: 10</div>
+            <button class="btn-start" onclick="resetGame()">再玩一次</button>
+        </div>
+    </div>
+    
+    <div class="instructions">
+        <h3>📖 游戏说明</h3>
+        <ol>
+            <li><strong>建造炮台</strong>攻击猛鬼，保护房门</li>
+            <li><strong>升级门</strong>增加血量和防御</li>
+            <li><strong>修门</strong>恢复门的血量</li>
+            <li><strong>床铺</strong>自动产生金币</li>
+            <li><strong>发电机</strong>增加金币产出速度</li>
+            <li>抵御<strong>10波</strong>猛鬼进攻即可获胜</li>
+        </ol>
+    </div>
+
+    <script src="game.js"></script>
+</body>
+</html>
