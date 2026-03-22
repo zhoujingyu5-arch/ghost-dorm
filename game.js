@@ -455,7 +455,8 @@ function toggleBuildMenu() {
 
 function selectBuild(type) {
     gameState.selectedBuildType = type;
-    toggleBuildMenu();
+    gameState.buildMenuOpen = false;
+    document.getElementById('buildMenu').classList.remove('active');
 }
 
 // 升级门
