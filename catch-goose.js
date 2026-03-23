@@ -155,24 +155,31 @@ class CatchGooseGame {
     initCanvas() {
         const container = document.getElementById('gameContainer');
         const containerWidth = container.clientWidth || window.innerWidth;
-        const containerHeight = window.innerHeight - 200; // 留出空间给头部和槽位
+        const containerHeight = window.innerHeight - 250; // 留出空间给头部、槽位和按钮
         
         // 移动端适配：确保画布不会太大
-        const maxCanvasWidth = Math.min(containerWidth - 20, 400);
-        const maxCanvasHeight = Math.min(containerHeight, 500);
+        const maxCanvasWidth = Math.min(containerWidth - 20, 380);
+        const maxCanvasHeight = Math.min(containerHeight, 450);
         
-        this.canvas.width = maxCanvasWidth;
-        this.canvas.height = maxCanvasHeight;
+        // 设置画布尺寸
+        this.canvas.style.width = maxCanvasWidth + 'px';
+        this.canvas.style.height = maxCanvasHeight + 'px';
+        
+        // 设置实际像素尺寸（考虑设备像素比）
+        const dpr = window.devicePixelRatio || 1;
+        this.canvas.width = maxCanvasWidth * dpr;
+        this.canvas.height = maxCanvasHeight * dpr;
+        this.ctx.scale(dpr, dpr);
         
         // 计算物品大小以适应画布
-        const availableWidth = this.canvas.width - 30;
-        const availableHeight = this.canvas.height - 30;
+        const availableWidth = maxCanvasWidth - 30;
+        const availableHeight = maxCanvasHeight - 30;
         
         const cellWidth = Math.floor(availableWidth / CONFIG.GRID_COLS);
         const cellHeight = Math.floor(availableHeight / CONFIG.GRID_ROWS);
         
         CONFIG.ITEM_SIZE = Math.min(cellWidth, cellHeight) - CONFIG.ITEM_GAP;
-        CONFIG.ITEM_SIZE = Math.max(CONFIG.ITEM_SIZE, 35); // 最小35px
+        CONFIG.ITEM_SIZE = Math.max(CONFIG.ITEM_SIZE, 40); // 最小40px，确保可点击
         CONFIG.ITEM_SIZE = Math.min(CONFIG.ITEM_SIZE, 55); // 最大55px
         
         // 更新网格间距
