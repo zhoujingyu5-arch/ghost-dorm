@@ -73,7 +73,7 @@ class Room {
         this.bed = {
             level: 1,
             x: x + 10,
-            y: y + this.height - BED_SIZE - 10
+            y: y + this.height - CONFIG.BED_SIZE - 10
         };
         
         // 门
