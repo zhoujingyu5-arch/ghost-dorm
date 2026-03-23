@@ -15,6 +15,11 @@ const CONFIG = {
     TURRET_SIZE: 25,
     GHOST_SIZE: 35,
     
+    // 小人角色配置
+    PLAYER_SIZE: 20,
+    PLAYER_SPEED: 2.5,
+    PLAYER_ANIMATION_SPEED: 150,  // 毫秒每帧
+    
     // 经济系统
     START_GOLD: 200,
     BED_INCOME_BASE: 10,      // 床基础产金
@@ -49,9 +54,248 @@ let gameState = {
     ghost: null,
     projectiles: [],
     particles: [],
+    playerCharacters: [],  // 小人角色数组
     lastTime: 0,
-    gameOver: false
+    gameOver: false,
+    clickTarget: null,     // 点击目标位置
+    clickIndicatorTimer: 0 // 点击指示器计时器
 };
+
+// 小人角色类
+class PlayerCharacter {
+    constructor(id, x, y, room, isHuman = false) {
+        this.id = id;
+        this.x = x;
+        this.y = y;
+        this.width = CONFIG.PLAYER_SIZE;
+        this.height = CONFIG.PLAYER_SIZE;
+        this.room = room;  // 所属房间
+        this.isHuman = isHuman;  // 是否是人类玩家控制
+        
+        // 移动相关
+        this.targetX = x;
+        this.targetY = y;
+        this.isMoving = false;
+        this.moveSpeed = CONFIG.PLAYER_SPEED;
+        
+        // 动画相关
+        this.animationFrame = 0;
+        this.animationTimer = 0;
+        this.facingRight = true;
+        
+        // AI相关
+        this.aiMoveTimer = 0;
+        this.aiMoveInterval = 2000 + Math.random() * 3000;  // 2-5秒随机移动
+        this.aiTargetRoom = null;
+    }
+    
+    update(deltaTime) {
+        // 更新动画
+        if (this.isMoving) {
+            this.animationTimer += deltaTime;
+            if (this.animationTimer >= CONFIG.PLAYER_ANIMATION_SPEED) {
+                this.animationFrame = (this.animationFrame + 1) % 4;
+                this.animationTimer = 0;
+            }
+        } else {
+            this.animationFrame = 0;
+        }
+        
+        // 人类玩家：点击移动
+        if (this.isHuman) {
+            if (this.isMoving) {
+                this.moveToTarget(deltaTime);
+            }
+        } else {
+            // AI移动逻辑
+            this.aiUpdate(deltaTime);
+        }
+        
+        // 检查是否走到房间门口
+        this.checkRoomEntry();
+    }
+    
+    moveToTarget(deltaTime) {
+        const dx = this.targetX - this.x;
+        const dy = this.targetY - this.y;
+        const distance = Math.sqrt(dx * dx + dy * dy);
+        
+        if (distance < 5) {
+            // 到达目标
+            this.x = this.targetX;
+            this.y = this.targetY;
+            this.isMoving = false;
+        } else {
+            // 继续移动
+            const moveDistance = this.moveSpeed * (deltaTime / 16);
+            const ratio = Math.min(moveDistance / distance, 1);
+            
+            this.x += dx * ratio;
+            this.y += dy * ratio;
+            
+            // 更新朝向
+            this.facingRight = dx > 0;
+        }
+    }
+    
+    setTarget(targetX, targetY) {
+        this.targetX = targetX;
+        this.targetY = targetY;
+        this.isMoving = true;
+    }
+    
+    aiUpdate(deltaTime) {
+        this.aiMoveTimer += deltaTime;
+        
+        if (this.isMoving) {
+            this.moveToTarget(deltaTime);
+        } else if (this.aiMoveTimer >= this.aiMoveInterval) {
+            // 随机选择一个目标位置或房间
+            this.aiChooseTarget();
+            this.aiMoveTimer = 0;
+            this.aiMoveInterval = 2000 + Math.random() * 3000;
+        }
+    }
+    
+    aiChooseTarget() {
+        // AI有30%概率走向某个房间门口，70%概率随机走动
+        if (Math.random() < 0.3) {
+            // 选择一个随机房间
+            const aliveRooms = gameState.rooms.filter(r => r.player.isAlive);
+            if (aliveRooms.length > 0) {
+                const targetRoom = aliveRooms[Math.floor(Math.random() * aliveRooms.length)];
+                // 走到房间门口
+                this.targetX = targetRoom.door.x + CONFIG.DOOR_WIDTH / 2 - this.width / 2;
+                this.targetY = targetRoom.door.y - this.height - 10;
+                this.isMoving = true;
+                this.aiTargetRoom = targetRoom;
+            }
+        } else {
+            // 随机走动
+            const margin = 50;
+            this.targetX = margin + Math.random() * (canvas.width - margin * 2);
+            this.targetY = 100 + Math.random() * (canvas.height - 350);
+            this.isMoving = true;
+            this.aiTargetRoom = null;
+        }
+    }
+    
+    checkRoomEntry() {
+        // 检查是否走到某个房间门口附近
+        for (const room of gameState.rooms) {
+            const doorCenterX = room.door.x + CONFIG.DOOR_WIDTH / 2;
+            const doorCenterY = room.door.y + CONFIG.DOOR_HEIGHT / 2;
+            
+            const dx = (this.x + this.width / 2) - doorCenterX;
+            const dy = (this.y + this.height / 2) - doorCenterY;
+            const distance = Math.sqrt(dx * dx + dy * dy);
+            
+            // 如果在门口附近且停止移动，自动选择该房间
+            if (distance < 40 && !this.isMoving) {
+                if (this.isHuman) {
+                    // 人类玩家：自动选择房间
+                    if (gameState.selectedRoom !== room) {
+                        gameState.selectedRoom = room;
+                        addLog(`走到 ${room.player.isHuman ? '你的' : 'AI' + room.id} 房间门口，自动选择该房间`, 'build');
+                        updateUI();
+                    }
+                } else {
+                    // AI：有概率进入房间（只是视觉效果，实际游戏逻辑不变）
+                    if (Math.random() < 0.3) {
+                        // AI小人"进入"房间，暂时消失一会儿
+                        this.x = room.x + room.width / 2 - this.width / 2;
+                        this.y = room.y + room.height / 2 - this.height / 2;
+                    }
+                }
+                break;
+            }
+        }
+    }
+    
+    draw() {
+        const centerX = this.x + this.width / 2;
+        const centerY = this.y + this.height / 2;
+        
+        ctx.save();
+        
+        // 如果是人类玩家，绘制选中光环
+        if (this.isHuman) {
+            ctx.strokeStyle = '#4ecdc4';
+            ctx.lineWidth = 2;
+            ctx.setLineDash([3, 3]);
+            ctx.beginPath();
+            ctx.arc(centerX, centerY + 5, 18, 0, Math.PI * 2);
+            ctx.stroke();
+            ctx.setLineDash([]);
+        }
+        
+        // 绘制阴影
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
+        ctx.beginPath();
+        ctx.ellipse(centerX, this.y + this.height - 2, 10, 4, 0, 0, Math.PI * 2);
+        ctx.fill();
+        
+        // 身体摆动动画
+        const bobOffset = this.isMoving ? Math.sin(this.animationFrame * Math.PI / 2) * 2 : 0;
+        const bodyY = this.y + bobOffset;
+        
+        // 绘制身体
+        ctx.fillStyle = this.isHuman ? '#4ecdc4' : '#ff9f43';
+        ctx.fillRect(this.x + 4, bodyY + 8, 12, 10);
+        
+        // 绘制头
+        ctx.fillStyle = this.isHuman ? '#ffeaa7' : '#dfe6e9';
+        ctx.beginPath();
+        ctx.arc(centerX, bodyY + 6, 6, 0, Math.PI * 2);
+        ctx.fill();
+        
+        // 绘制眼睛
+        ctx.fillStyle = '#2d3436';
+        const eyeOffsetX = this.facingRight ? 2 : -2;
+        ctx.beginPath();
+        ctx.arc(centerX + eyeOffsetX - 2, bodyY + 5, 1.5, 0, Math.PI * 2);
+        ctx.arc(centerX + eyeOffsetX + 2, bodyY + 5, 1.5, 0, Math.PI * 2);
+        ctx.fill();
+        
+        // 绘制腿部（行走动画）
+        ctx.fillStyle = '#2d3436';
+        if (this.isMoving) {
+            const legOffset = Math.sin(this.animationFrame * Math.PI / 2) * 4;
+            // 左腿
+            ctx.fillRect(this.x + 5 + legOffset, bodyY + 16, 3, 5);
+            // 右腿
+            ctx.fillRect(this.x + 12 - legOffset, bodyY + 16, 3, 5);
+        } else {
+            // 站立姿势
+            ctx.fillRect(this.x + 5, bodyY + 16, 3, 5);
+            ctx.fillRect(this.x + 12, bodyY + 16, 3, 5);
+        }
+        
+        // 绘制手臂
+        ctx.fillStyle = this.isHuman ? '#ffeaa7' : '#dfe6e9';
+        if (this.isMoving) {
+            const armOffset = Math.cos(this.animationFrame * Math.PI / 2) * 3;
+            ctx.fillRect(this.x + 2, bodyY + 10 + armOffset, 3, 6);
+            ctx.fillRect(this.x + 15, bodyY + 10 - armOffset, 3, 6);
+        } else {
+            ctx.fillRect(this.x + 2, bodyY + 10, 3, 6);
+            ctx.fillRect(this.x + 15, bodyY + 10, 3, 6);
+        }
+        
+        // 玩家标识
+        ctx.fillStyle = '#fff';
+        ctx.font = '10px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillText(this.isHuman ? '你' : `AI${this.id}`, centerX, this.y - 5);
+        
+        ctx.restore();
+    }
+    
+    containsPoint(px, py) {
+        return px >= this.x && px <= this.x + this.width &&
+               py >= this.y && py <= this.y + this.height;
+    }
+}
 
 // 房间类
 class Room {
@@ -640,23 +884,36 @@ function initGame() {
     const roomSpacing = 160;
     const startX = 80;
     const roomY = 350;
-    
+
     for (let i = 0; i < CONFIG.ROOM_COUNT; i++) {
         gameState.rooms.push(new Room(i, startX + i * roomSpacing, roomY));
     }
-    
+
     // 创建猛鬼
     gameState.ghost = new Ghost();
-    
+
+    // 创建小人角色
+    gameState.playerCharacters = [];
+    for (let i = 0; i < CONFIG.ROOM_COUNT; i++) {
+        // 每个房间一个小人，初始位置在房间门口附近
+        const room = gameState.rooms[i];
+        const charX = room.door.x + CONFIG.DOOR_WIDTH / 2 - CONFIG.PLAYER_SIZE / 2;
+        const charY = room.door.y - CONFIG.PLAYER_SIZE - 20;
+        const isHuman = (i === 0);  // 第一个小人由人类玩家控制
+        gameState.playerCharacters.push(new PlayerCharacter(i, charX, charY, room, isHuman));
+    }
+
     // 重置状态
     gameState.projectiles = [];
     gameState.particles = [];
     gameState.wave = 1;
     gameState.gameOver = false;
     gameState.selectedRoom = gameState.rooms[0];  // 默认选择第一个房间
-    
+    gameState.clickTarget = null;
+    gameState.clickIndicatorTimer = 0;
+
     updateUI();
-    addLog('游戏开始！选择你的房间并建造炮台！', 'build');
+    addLog('游戏开始！点击地面移动你的小人，走到房间门口自动选择该房间！', 'build');
 }
 
 // 游戏循环
@@ -671,14 +928,22 @@ function gameLoop(currentTime) {
     
     // 更新
     gameState.rooms.forEach(room => room.update(deltaTime));
-    
+
     if (gameState.ghost) {
         gameState.ghost.update(deltaTime);
     }
-    
+
+    // 更新小人角色
+    gameState.playerCharacters.forEach(char => char.update(deltaTime));
+
+    // 更新点击指示器
+    if (gameState.clickIndicatorTimer > 0) {
+        gameState.clickIndicatorTimer -= deltaTime;
+    }
+
     gameState.projectiles.forEach(p => p.update());
     gameState.projectiles = gameState.projectiles.filter(p => p.active);
-    
+
     gameState.particles.forEach(p => p.update());
     gameState.particles = gameState.particles.filter(p => p.life > 0);
     
@@ -715,7 +980,25 @@ function draw() {
     
     // 绘制房间
     gameState.rooms.forEach(room => room.draw());
-    
+
+    // 绘制小人角色（在房间下面，但在其他元素上面）
+    gameState.playerCharacters.forEach(char => char.draw());
+
+    // 绘制点击目标指示器
+    if (gameState.clickTarget && gameState.clickIndicatorTimer > 0) {
+        const alpha = gameState.clickIndicatorTimer / 500;
+        ctx.strokeStyle = `rgba(78, 205, 196, ${alpha})`;
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(gameState.clickTarget.x, gameState.clickTarget.y, 10 + (500 - gameState.clickIndicatorTimer) / 20, 0, Math.PI * 2);
+        ctx.stroke();
+        
+        ctx.fillStyle = `rgba(78, 205, 196, ${alpha * 0.5})`;
+        ctx.beginPath();
+        ctx.arc(gameState.clickTarget.x, gameState.clickTarget.y, 5, 0, Math.PI * 2);
+        ctx.fill();
+    }
+
     // 绘制猛鬼
     if (gameState.ghost) {
         gameState.ghost.draw();
@@ -852,20 +1135,39 @@ document.querySelectorAll('.build-btn').forEach(btn => {
     });
 });
 
-// 点击选择房间
+// 点击选择房间或移动小人
 canvas.addEventListener('click', (e) => {
     if (!gameState.isRunning) return;
-    
+
     const rect = canvas.getBoundingClientRect();
     const x = e.clientX - rect.left;
     const y = e.clientY - rect.top;
-    
+
+    // 首先检查是否点击了房间
+    let clickedRoom = null;
     for (const room of gameState.rooms) {
         if (room.containsPoint(x, y)) {
-            gameState.selectedRoom = room;
-            addLog(room.player.isHuman ? '切换到你的房间' : `查看 AI${room.id} 的房间`);
-            updateUI();
+            clickedRoom = room;
             break;
+        }
+    }
+
+    if (clickedRoom) {
+        // 点击了房间，选择该房间
+        gameState.selectedRoom = clickedRoom;
+        addLog(clickedRoom.player.isHuman ? '切换到你的房间' : `查看 AI${clickedRoom.id} 的房间`);
+        updateUI();
+    } else {
+        // 点击了地面，移动人类玩家的小人
+        const humanChar = gameState.playerCharacters.find(char => char.isHuman);
+        if (humanChar) {
+            humanChar.setTarget(x - CONFIG.PLAYER_SIZE / 2, y - CONFIG.PLAYER_SIZE / 2);
+            
+            // 设置点击指示器
+            gameState.clickTarget = { x, y };
+            gameState.clickIndicatorTimer = 500;  // 显示500毫秒
+            
+            addLog('移动中...', 'build');
         }
     }
 });
